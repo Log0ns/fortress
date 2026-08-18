@@ -1,0 +1,23 @@
+
+
+
+Item types — expand beyond stone/wood/dirt. Add iron_ore, coal, plank, iron_bar, torch, pick, axe
+
+Workshop crafting queue — click workshop to open a job queue UI. Recipes like stone + stone → stone_block, iron_ore + coal → iron_bar
+
+
+
+
+Enemies — surface spawns at night (goblins, skeletons). They pathfind toward dwarves. Dwarves flee or fight back
+
+Combat — dwarves auto-attack adjacent enemies. Damage based on equipped tool/weapon
+
+Equipment slots — dwarves can be assigned a pick (faster digging), axe (faster chopping), sword (combat)
+
+Deeper underground — below a certain Z, stone becomes harder (requires iron pick). Rare ores only found deep
+
+
+
+Water & flooding — water flows downhill into dug spaces. Requires drainage planning
+
+Biome expeditions — send dwarves to other overworld chunks to gather unique resources

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fortress</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #111; display: flex; height: 100vh; overflow: hidden; font-family: monospace; }
+    #sidebar {
+      width: 200px; min-width: 200px; background: #1a1a1a; border-left: 1px solid #333;
+      display: flex; flex-direction: column; color: #ccc; font-size: 13px; order: 2;
+      overflow-y: auto;
+    }
+    #sidebar section { padding: 8px; border-bottom: 1px solid #333; }
+    #sidebar h3 { color: #fa0; font-size: 12px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+    #sidebar .row { display: flex; justify-content: space-between; margin: 2px 0; }
+    #sidebar .val { color: #fff; }
+    #toolbar { display: flex; flex-direction: column; gap: 4px; }
+    #toolbar button {
+      background: #222; border: 1px solid #444; color: #ccc; padding: 5px 6px;
+      font-family: monospace; font-size: 12px; cursor: pointer; text-align: left;
+    }
+    #toolbar button.active { background: #3a2800; border-color: #f80; color: #f80; }
+    #toolbar button:hover { background: #2a2a2a; }
+    #mat-selector button { flex: 1 1 auto; font-size: 10px; padding: 2px 4px; }
+    #dwarf-list { display: flex; flex-direction: column; gap: 3px; }
+    .dwarf-row {
+      padding: 4px 6px; cursor: pointer; border: 1px solid transparent;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .dwarf-row:hover { background: #252525; }
+    .dwarf-row.selected { border-color: #ff0; background: #2a2800; }
+    .dwarf-row.dead { color: #555; }
+    .dwarf-row .dname { color: #0f0; }
+    .dwarf-row .djob { color: #777; font-size: 11px; text-align: right; }
+    .dwarf-row.dead .dname { color: #555; }
+    .dwarf-row.selected .dname { color: #ff0; }
+    .hunger-bar { width: 60px; height: 6px; background: #333; border-radius: 2px; overflow: hidden; }
+    .hunger-fill { height: 100%; background: #4f4; transition: width 0.3s; }
+    #dwarf-detail .stat-row { display: flex; justify-content: space-between; margin: 3px 0; }
+    #dwarf-detail .bar { flex: 1; height: 8px; background: #333; border-radius: 2px; overflow: hidden; margin-left: 8px; }
+    #dwarf-detail .bar-fill { height: 100%; border-radius: 2px; }
+    #ui-message {
+      display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #222; border: 1px solid #f80; color: #f80; padding: 6px 14px;
+      font-family: monospace; font-size: 13px; z-index: 100; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+<div id="ui-message"></div>
+<div style="position:relative;flex:1;order:1;overflow:hidden">
+<canvas id="map"></canvas>
+<div id="zlevel-btns" style="position:absolute;bottom:12px;left:12px;display:flex;flex-direction:column;gap:4px;z-index:10">
+  <button onclick="camZ=Math.min(LEVELS-1,camZ+1);updateSidebar()" style="background:#1a1a1a;border:1px solid #555;color:#fa0;font-family:monospace;font-size:14px;width:28px;height:28px;cursor:pointer;line-height:1">▲</button>
+  <div id="zlevel-display" style="background:#111;border:1px solid #444;color:#fff;font-family:monospace;font-size:12px;width:28px;height:20px;display:flex;align-items:center;justify-content:center">0</div>
+  <button onclick="camZ=Math.max(0,camZ-1);updateSidebar()" style="background:#1a1a1a;border:1px solid #555;color:#fa0;font-family:monospace;font-size:14px;width:28px;height:28px;cursor:pointer;line-height:1">▼</button>
+</div>
+</div>
+<div id="sidebar">
+  <section>
+    <h3>Fortress</h3>
+    <div class="row"><span>Time</span><span class="val" id="ui-time">Y1 Spring</span></div>
+    <div class="row"><span>Z-level</span><span class="val" id="ui-zlevel">0</span></div>
+    <div class="row"><span>Biome</span><span class="val" id="ui-biome">-</span></div>
+    <div class="row"><span>Dwarves</span><span class="val" id="ui-dwarves">7/7</span></div>
+  </section>
+  <section>
+    <h3>Dwarves</h3>
+    <div id="dwarf-list"></div>
+  </section>
+  <section id="dwarf-detail" style="display:none">
+    <h3 id="detail-name"></h3>
+    <div class="stat-row"><span>Job</span><span class="val" id="detail-job"></span></div>
+    <div class="stat-row"><span>HP</span><span class="val" id="detail-hp"></span></div>
+    <div class="stat-row"><span>Hunger</span><span class="val" id="detail-hunger"></span></div>
+    <button id="btn-cancel-job" onclick="const d=[...selected][0]; if(d) _resetDwarf(d);" style="margin-top:4px;width:100%;background:#222;border:1px solid #444;color:#f84;padding:4px;font-family:monospace;font-size:12px;cursor:pointer;display:none">✕ Cancel Job</button>
+  </section>
+  <section>
+    <h3>Designate</h3>
+    <div id="toolbar">
+      <button id="btn-pause" onclick="togglePause()">[Space] Pause</button>
+      <button id="btn-select"  onclick="setMode('select')">[Shift+V] Select</button>
+      <div id="select-submenu" style="display:none;flex-direction:column;gap:2px;margin-left:8px">
+        <button id="btn-cancel" onclick="setMode('cancel')">Cancel Jobs</button>
+      </div>
+      <button id="btn-attack"   onclick="setMode('attack')">[Shift+A] Attack</button>
+      <button id="btn-dig"       onclick="setMode('dig')">[Shift+D] Dig</button>
+      <button id="btn-dig-stair" onclick="setMode('dig-stair')">[Shift+/] Dig Stair</button>
+      <button id="btn-chop"      onclick="setMode('chop')">[Shift+C] Chop</button>
+      <button id="btn-destroy"   onclick="setMode('destroy')">[Shift+X] Destroy</button>
+      <button id="btn-stock"     onclick="setMode('stock')">[Shift+S] Stockpile</button>
+      <button id="btn-build"     onclick="setMode('build')">[Shift+B] Build</button>
+      <div id="build-submenu" style="display:none;flex-direction:column;gap:2px;margin-left:8px">
+        <div style="color:#666;font-size:10px;padding:2px 0 1px">MATERIAL</div>
+        <div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:4px">
+          <button id="mat-stone"     onclick="setActiveMaterial('stone')">Stone</button>
+          <button id="mat-dirt"      onclick="setActiveMaterial('dirt')">Dirt</button>
+          <button id="mat-sand"      onclick="setActiveMaterial('sand')">Sand</button>
+          <button id="mat-hardstone" onclick="setActiveMaterial('hardstone')">Hardstone</button>
+          <button id="mat-obsidian"  onclick="setActiveMaterial('obsidian')">Obsidian</button>
+          <button id="mat-iron"      onclick="setActiveMaterial('iron')">Iron</button>
+          <button id="mat-coal"      onclick="setActiveMaterial('coal')">Coal</button>
+          <button id="mat-gold"      onclick="setActiveMaterial('gold')">Gold</button>
+          <button id="mat-gem"       onclick="setActiveMaterial('gem')">Gem</button>
+          <button id="mat-wood"      onclick="setActiveMaterial('wood')">Wood</button>
+        </div>
+        <div style="color:#666;font-size:10px;padding:2px 0 1px">WALLS &amp; FLOORS</div>
+        <button id="btn-wall"  onclick="setBuildMode('wall')">Wall<br><span id="cost-wall"  style="font-size:10px;color:#888"></span></button>
+        <button id="btn-floor" onclick="setBuildMode('floor')">Floor<br><span id="cost-floor" style="font-size:10px;color:#888"></span></button>
+        <div style="color:#666;font-size:10px;padding:4px 0 1px">STRUCTURES</div>
+        <button id="btn-stair"    onclick="setBuildMode('stair')">Stair<br><span id="cost-stair"    style="font-size:10px;color:#888"></span></button>
+        <button id="btn-workshop" onclick="setBuildMode('workshop')">Workshop<br><span id="cost-workshop" style="font-size:10px;color:#888"></span></button>
+        <button id="btn-door"     onclick="setBuildMode('door')">Door<br><span id="cost-door"     style="font-size:10px;color:#888"></span></button>
+        <div style="color:#666;font-size:10px;padding:4px 0 1px">FURNITURE</div>
+        <button id="btn-bed"    onclick="setBuildMode('bed')">Bed<br><span id="cost-bed"    style="font-size:10px;color:#888"></span></button>
+        <button id="btn-chair"  onclick="setBuildMode('chair')">Chair<br><span id="cost-chair"  style="font-size:10px;color:#888"></span></button>
+        <button id="btn-table"  onclick="setBuildMode('table')">Table<br><span id="cost-table"  style="font-size:10px;color:#888"></span></button>
+        <button id="btn-chest"  onclick="setBuildMode('chest')">Chest<br><span id="cost-chest"  style="font-size:10px;color:#888"></span></button>
+        <button id="btn-barrel" onclick="setBuildMode('barrel')">Barrel<br><span id="cost-barrel" style="font-size:10px;color:#888"></span></button>
+      </div>
+      <button id="btn-farm" onclick="setMode('farm')">[Shift+F] Farm Plot</button>
+    </div>
+  </section>
+  <section>
+    <h3>Save / Load</h3>
+    <div style="display:flex;gap:4px">
+      <button onclick="saveGame()" style="flex:1;background:#222;border:1px solid #444;color:#ccc;padding:5px;font-family:monospace;font-size:12px;cursor:pointer">&#128190; Save</button>
+      <button onclick="loadGame()" style="flex:1;background:#222;border:1px solid #444;color:#ccc;padding:5px;font-family:monospace;font-size:12px;cursor:pointer">&#128194; Load</button>
+    </div>
+    <div id="ui-save-status" style="font-size:11px;color:#888;margin-top:4px"></div>
+  </section>
+</div>
+
+<script>window.onerror = (msg,src,line,col,err) => { document.body.innerHTML = '<pre style="color:red;padding:20px">' + msg + '\n' + src + ':' + line + '\n' + (err&&err.stack||'') + '</pre>'; return true; };</script>
+<!-- load order matters: engine → state → jobs → entities → render → ui → save → main -->
+<script src="js/engine.js"></script>
+<script src="js/state.js"></script>
+<script src="js/jobs.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/save.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
